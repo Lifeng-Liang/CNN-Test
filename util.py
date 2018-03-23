@@ -8,11 +8,14 @@ import torchvision.transforms as tf
 from torch.nn.init import xavier_uniform as xavier
 
 class Initializer():
-	def __init__(self, batch_size=64, crop=False, train_path='train', test_path='test', val_path='val'):
+	def __init__(self, batch_size=64, crop=False, train_path='train', test_path='test', val_path='val', num_workers=0):
 		self.batch_size		= batch_size
 		self.train_path		= train_path
 		self.test_path		= test_path
 		self.val_path		= val_path
+		self.num_workers	= num_workers
+		self.best_acc		= 0.0
+		self.test_acc		= 0.0
 		if(crop):
 			self.train_trans = tf.Compose([tf.RandomResizedCrop(42), tf.RandomHorizontalFlip(), tf.Grayscale(), tf.ToTensor()])
 			self.test_trans = tf.Compose([tf.CenterCrop(42), tf.RandomHorizontalFlip(), tf.Grayscale(), tf.ToTensor()])
@@ -20,7 +23,7 @@ class Initializer():
 			self.train_trans = tf.Compose([tf.RandomHorizontalFlip(), tf.Grayscale(), tf.ToTensor()])
 			self.test_trans = tf.Compose([tf.Grayscale(), tf.ToTensor()])
 
-	def run(self, cnn, optimizer, loss_func, EPOCH):
+	def run(self, cnn, optimizer, loss_func, EPOCH, min_acc = 50.0):
 		print(cnn)
 
 		train_loader = self.read(self.train_path, self.batch_size, self.train_trans)
@@ -38,14 +41,23 @@ class Initializer():
 				val_acc = self.test(cnn, val_loader)
 			tend = time.time()
 			tdura = tend - tstart
-			print('Epoch:', epoch, '| loss: %.4f' % loss_data, '| test acc: %.2f' % test_acc, '| val acc: %.2f' % val_acc, '| et: %.3f' % tdura)
+			best_acc = (test_acc + val_acc) / 2
+			print('Epoch:', epoch, '| loss: %.4f' % loss_data, '| test acc: %.2f' % test_acc, '| val acc: %.2f' % val_acc, '| avg acc: %.2f' % best_acc, '| et: %.3f' % tdura)
+			if(test_acc > min_acc and test_acc > self.test_acc):
+				self.test_acc = test_acc
+				torch.save(cnn, 'best.pkl')
+				print('Save best.pkl')
+			if(val_acc > 0.0 and test_acc > min_acc and best_acc > self.best_acc):
+				self.best_acc = best_acc
+				torch.save(cnn, 'best_avg.pkl')
+				print('Save best_avg.pkl')
 			tstart = tend
 
 		self.show(cnn)
 
 	def read(self, folder, batch_size, trans):
 		data = torchvision.datasets.ImageFolder(folder, trans)
-		loader = Data.DataLoader(dataset=data, batch_size=batch_size, shuffle=True)
+		loader = Data.DataLoader(dataset=data, batch_size=batch_size, shuffle=True, num_workers=self.num_workers)
 		return loader
 
 	def train(self, model, loader, optimizer, loss_func):
@@ -57,7 +69,7 @@ class Initializer():
 			output = model(b_x)
 			loss = loss_func(output, b_y)
 			optimizer.zero_grad()						# clear gradients for this training step
-			loss.backward()							# backpropagation, compute gradients
+			loss.backward()								# backpropagation, compute gradients
 			optimizer.step()							# apply gradients
 			loss_data += loss.data[0]
 			count += 1
@@ -88,26 +100,41 @@ class Initializer():
 	def get_pred(self, output):
 		return torch.max(output, 1)[1].data.numpy().squeeze()
 
-	def new_fc(self, in_num, num1, out_num):
+	def fc(self, list, drop_rate=0.5):
+		seq = nn.Sequential()
+		size = len(list) - 1
+		i = iter(range(100))
+		for index in range(size-1):
+			out_num = list[index+1]
+			seq.add_module(str(next(i)), nn.Linear(list[index], out_num))
+			seq.add_module(str(next(i)), nn.BatchNorm1d(out_num))
+			seq.add_module(str(next(i)), nn.ReLU())
+			if(drop_rate > 0.0):
+				seq.add_module(str(next(i)), nn.Dropout(drop_rate))
+		seq.add_module(str(next(i)), nn.Linear(list[size-1], list[size]))
+		seq.add_module(str(next(i)), nn.LogSoftmax(dim=1))
+		return seq
+
+	def new_fc(self, in_num, num1, out_num, drop_rate=0.5):
 		return nn.Sequential(
 			nn.Linear(in_num, num1),
 			nn.BatchNorm1d(num1),
 			nn.ReLU(),
-			nn.Dropout(),
+			nn.Dropout(drop_rate),
 			nn.Linear(num1, out_num),
-			nn.Softmax(dim=1),
+			nn.Softmax(dim=1)
 		)
 
-	def new_fc2(self, in_num, num1, num2, out_num):
+	def new_fc2(self, in_num, num1, num2, out_num, drop_rate=0.5):
 		return nn.Sequential(
 			nn.Linear(in_num, num1),
 			nn.BatchNorm1d(num1),
 			nn.ReLU(),
-			nn.Dropout(),
+			nn.Dropout(drop_rate),
 			nn.Linear(num1, num2),
 			nn.BatchNorm1d(num2),
 			nn.ReLU(),
-			nn.Dropout(),
+			nn.Dropout(drop_rate),
 			nn.Linear(num2, out_num),
 			nn.Softmax(dim=1),
 		)
@@ -137,8 +164,8 @@ class Initializer():
 
 	def weights_init(self, m):
 		classname=m.__class__.__name__
-		if classname.find('Conv') != -1:
-			print(classname)
+		if classname == 'Conv2d' or classname == 'Linear':
+			print(classname, 'apply xavier')
 			xavier(m.weight.data)
 			#xavier(m.bias.data)
 			m.bias.data.fill_(0.1)
