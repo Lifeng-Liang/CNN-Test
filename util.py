@@ -46,11 +46,11 @@ class Initializer():
 			if(test_acc > min_acc and test_acc > self.test_acc):
 				self.test_acc = test_acc
 				torch.save(cnn, 'best.pkl')
-				print('Save best.pkl')
-			if(val_acc > 0.0 and test_acc > min_acc and best_acc > self.best_acc):
+				print('Save best.pkl for test acc %.2f' % test_acc)
+			if(val_acc > 0.0 and best_acc > min_acc and best_acc > self.best_acc):
 				self.best_acc = best_acc
 				torch.save(cnn, 'best_avg.pkl')
-				print('Save best_avg.pkl')
+				print('Save best_avg.pkl for avg acc %.2f' % best_acc)
 			tstart = tend
 
 		self.show(cnn)
@@ -77,16 +77,15 @@ class Initializer():
 
 	def test(self, model, loader):
 		model.eval()
-		sumAcc = 0.0
+		sumAcc = 0
 		count = 0
 		for _, (tx, ty) in enumerate(loader):
 			zx, zy = Variable(tx), torch.LongTensor(ty)
 			test_output = model(zx)
 			pred_y = self.get_pred(test_output)
-			a = sum(pred_y == zy) / float(zy.size(0))
-			sumAcc += a
-			count += 1
-		return sumAcc * 100 / count
+			sumAcc += sum(pred_y == zy)
+			count += zy.size(0)
+		return sumAcc * 100.0 / count
 
 	def show(self, model):
 		model.eval()

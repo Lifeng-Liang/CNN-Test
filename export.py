@@ -50,3 +50,5 @@ print('-----', test_output, test_output.data.numpy())
 print('-----', torch.max(test_output, 1)[1].data.numpy())
 print(pred_y, 'prediction number')
 print(sy.numpy(), 'real number')
+
+torch.onnx.export(model, Variable(sx), "best.onnx", verbose=True)
