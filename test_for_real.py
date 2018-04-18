@@ -1,10 +1,10 @@
-import os
 import time
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.utils.data as Data
 import torchvision
+import torchvision.transforms as tf
 from util import Initializer
 
 m = Initializer(num_workers=0, crop=True)
@@ -27,9 +27,16 @@ class CNN(nn.Module):
 		return self.out(x)
 
 
-cnn = CNN()
-cnn.apply(m.weights_init)
-#optim = torch.optim.Adam(cnn.parameters(), lr=0.001)
-optim = torch.optim.Adadelta(cnn.parameters())
-#run(cnn, optim, nn.CrossEntropyLoss(), 500, train_path='val', val_path='')
-m.run(cnn, optim, nn.CrossEntropyLoss(), 5000)
+cnn = torch.load('best.pkl')
+loader = m.read('final/zhou', 64, tf.Compose([tf.Resize((42,42)), tf.Grayscale(), tf.ToTensor()]))
+
+cnn.eval()
+sx, sy = next(iter(loader))
+test_output = cnn(Variable(sx))
+pred_y = m.get_pred(test_output)
+for x in test_output.data.numpy():
+	for y in x:
+		print('%.2f' % ((10**y)*100), end=', ')
+	print('')
+print(pred_y, 'prediction number')
+print(sy.numpy(), 'real number')

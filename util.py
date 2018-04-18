@@ -14,11 +14,11 @@ class Initializer():
 		self.test_path		= test_path
 		self.val_path		= val_path
 		self.num_workers	= num_workers
-		self.best_acc		= 0.0
-		self.test_acc		= 0.0
+		self.best_acc		= [0.0, 0.0, 0.0]
+		self.save_files		= ['best.pkl', 'best_val.pkl', 'best_avg.pkl', 'snap.pkl']
 		if(crop):
 			self.train_trans = tf.Compose([tf.RandomResizedCrop(42), tf.RandomHorizontalFlip(), tf.Grayscale(), tf.ToTensor()])
-			self.test_trans = tf.Compose([tf.CenterCrop(42), tf.RandomHorizontalFlip(), tf.Grayscale(), tf.ToTensor()])
+			self.test_trans = tf.Compose([tf.CenterCrop(42), tf.Grayscale(), tf.ToTensor()])
 		else:
 			self.train_trans = tf.Compose([tf.RandomHorizontalFlip(), tf.Grayscale(), tf.ToTensor()])
 			self.test_trans = tf.Compose([tf.Grayscale(), tf.ToTensor()])
@@ -33,27 +33,31 @@ class Initializer():
 
 		tstart = time.time()
 		val_acc = 0.0
+		avg_acc = 0.0
 		print('Start learning...')
 		for epoch in range(EPOCH):
 			loss_data = self.train(cnn, train_loader, optimizer, loss_func)
 			test_acc = self.test(cnn, test_loader)
 			if(self.val_path != ''):
 				val_acc = self.test(cnn, val_loader)
+				avg_acc = (test_acc + val_acc) / 2
 			tend = time.time()
 			tdura = tend - tstart
-			best_acc = (test_acc + val_acc) / 2
-			print('Epoch:', epoch, '| loss: %.4f' % loss_data, '| test acc: %.2f' % test_acc, '| val acc: %.2f' % val_acc, '| avg acc: %.2f' % best_acc, '| et: %.3f' % tdura)
-			if(test_acc > min_acc and test_acc > self.test_acc):
-				self.test_acc = test_acc
-				torch.save(cnn, 'best.pkl')
-				print('Save best.pkl for test acc %.2f' % test_acc)
-			if(val_acc > 0.0 and best_acc > min_acc and best_acc > self.best_acc):
-				self.best_acc = best_acc
-				torch.save(cnn, 'best_avg.pkl')
-				print('Save best_avg.pkl for avg acc %.2f' % best_acc)
+			print('Epoch:', epoch, '| loss: %.4f' % loss_data, '| test acc: %.2f' % test_acc, '| val acc: %.2f' % val_acc, '| avg acc: %.2f' % avg_acc, '| et: %.3f' % tdura)
+			self.save(cnn, epoch, min_acc, [test_acc, val_acc, avg_acc])
 			tstart = tend
 
 		self.show(cnn)
+
+	def save(self, cnn, epoch, min_acc, tas):
+		for i,acc in enumerate(tas):
+			if(acc > min_acc and acc > self.best_acc[i]):
+				self.best_acc[i] = acc
+				torch.save(cnn, self.save_files[i])
+				print('Save %s for acc %.2f' % (self.save_files[i], acc))
+		if(epoch > 0 and (epoch % 100) == 0):
+			torch.save(cnn, self.save_files[3])
+			print('Save %s for epoch %d' % (self.save_files[3], epoch))
 
 	def read(self, folder, batch_size, trans):
 		data = torchvision.datasets.ImageFolder(folder, trans)

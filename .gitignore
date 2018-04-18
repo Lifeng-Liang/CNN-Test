@@ -5,3 +5,5 @@
 /train
 /val
 /*.pkl
+/final
+/.vscode

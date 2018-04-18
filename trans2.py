@@ -27,6 +27,6 @@ for save_path, csv_file in [(train_set, train_csv), (val_set, val_csv), (test_se
             if not os.path.exists(subfolder):
                 os.makedirs(subfolder)
             im = Image.fromarray(pixel).convert('L')
-            image_name = os.path.join(subfolder, '{:05d}.jpg'.format(i))
+            image_name = os.path.join(subfolder, '{:05d}.png'.format(i))
             print(image_name)
             im.save(image_name)
