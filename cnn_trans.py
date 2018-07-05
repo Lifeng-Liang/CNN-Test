@@ -1,5 +1,4 @@
 from __future__ import print_function, division
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,14 +11,13 @@ import time
 import copy
 import os
 
-
 data_transforms = {
-	'train'	: tf.Compose([tf.Resize(224), tf.RandomHorizontalFlip(), tf.ToTensor()]),
-	'val'	: tf.Compose([tf.Resize(224), tf.ToTensor()]),
+	'train'	: tf.Compose([tf.Resize(240), tf.CenterCrop(224), tf.RandomHorizontalFlip(), tf.ToTensor()]),
+	'val'	: tf.Compose([tf.Resize(240), tf.CenterCrop(224), tf.ToTensor()]),
 }
 
 dsets			= {x: datasets.ImageFolder(x, data_transforms[x]) for x in ['train', 'val']}
-dset_loaders	= {x: torch.utils.data.DataLoader(dsets[x], batch_size=64, shuffle=True, num_workers=0) for x in ['train', 'val']}
+dset_loaders	= {x: torch.utils.data.DataLoader(dsets[x], batch_size=10, shuffle=True, num_workers=0) for x in ['train', 'val']}
 dset_sizes		= {x: len(dsets[x]) for x in ['train', 'val']}
 
 def train_model(model, criterion, optimizer, lr_scheduler, num_epochs=25):
@@ -30,16 +28,16 @@ def train_model(model, criterion, optimizer, lr_scheduler, num_epochs=25):
 		print('Epoch {}/{}'.format(epoch, num_epochs - 1))
 		print('-' * 10)
 	
-		# Each epoch has a training and validation phase
 		for phase in ['train', 'val']:
 			if phase == 'train':
-				optimizer = lr_scheduler(optimizer, epoch)
-				model.train(True)  # Set model to training mode
+				#optimizer = lr_scheduler(optimizer, epoch)
+				model.train(True)
 			else:
-				model.train(False)  # Set model to evaluate mode
+				model.train(False)
 	
 			running_loss = 0.0
 			running_corrects = 0
+			cur_len = 0
 	
 			# Iterate over data.
 			for data in dset_loaders[phase]:
@@ -64,8 +62,11 @@ def train_model(model, criterion, optimizer, lr_scheduler, num_epochs=25):
 	
 				# statistics
 				running_loss += loss.data[0]
-				running_corrects += torch.sum(preds == labels.data)
-	
+				plus = torch.sum(preds == labels.data)
+				running_corrects += plus
+				cur_len += len(labels)
+				print('--- {:.4f} {} {} {:.2f}'.format(running_loss, running_corrects, plus, running_corrects * 100.0 / cur_len))
+
 			epoch_loss = running_loss / dset_sizes[phase]
 			epoch_acc = running_corrects / dset_sizes[phase]
 	
@@ -94,5 +95,6 @@ num_ftrs = model.fc.in_features
 model.fc = nn.Linear(num_ftrs, 7)
 	
 criterion = nn.CrossEntropyLoss()
-optimizer_ft = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+#optimizer_ft = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer_ft = optim.Adam(model.parameters())
 train_model(model, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25)
